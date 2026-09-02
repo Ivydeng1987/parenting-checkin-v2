@@ -1,6 +1,6 @@
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const KEY = 'parenting_entries';
+const KEY = 'checkin_v3'; // 新版专用key，跟旧版 parenting_entries 分开存，互不影响
 
 async function redis(cmd, ...args) {
   const res = await fetch(`${REDIS_URL}/${cmd}/${args.map(a => encodeURIComponent(a)).join('/')}`, {
@@ -13,7 +13,6 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method === 'GET') {
