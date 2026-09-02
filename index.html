@@ -520,7 +520,31 @@ textarea { min-height: 72px; }
 <script>
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let entries = [];
-const API = '/api/data';
+const BIN_ID = '6a97978dda38895dfe2dad97';  // 打卡应用专用Bin ID（不是敏感信息）
+const WORKER_URL = 'https://sunlit-proxy.ivy-3fc.workers.dev'; // 中转站网址
+const ACCESS_TOKEN = 'RBhCP4O1yvwxN7nB9oMoQCzuj2ZnF3M9daOE76fRVtk'; // 中转站通行证
+
+// 从云端读取全部打卡记录
+async function getCloudEntries() {
+  const res = await fetch(`${WORKER_URL}/bin/${BIN_ID}/latest`, {
+    headers: { 'X-Access-Token': ACCESS_TOKEN }
+  });
+  if (!res.ok) throw new Error('读取云端数据失败');
+  const data = await res.json();
+  // jsonbin返回格式是 { record: ..., metadata: ... }，实际数据在 record 里
+  const record = data.record;
+  return Array.isArray(record) ? record : [];
+}
+
+// 把全部打卡记录整体写回云端
+async function pushCloudEntries(list) {
+  const res = await fetch(`${WORKER_URL}/bin/${BIN_ID}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Access-Token': ACCESS_TOKEN },
+    body: JSON.stringify(list)
+  });
+  if (!res.ok) throw new Error('保存到云端失败');
+}
 
 const FIELDS = [
   { id: 'son-moment',   label: '俊鹏·闪光点' },
@@ -545,8 +569,7 @@ async function init() {
   document.getElementById('today-date').textContent =
     now.getFullYear() + '年' + (now.getMonth()+1) + '月' + now.getDate() + '日';
   try {
-    const res = await fetch(API);
-    entries = await res.json();
+    entries = await getCloudEntries();
   } catch(e) { entries = []; }
   const dayInRound = (entries.length % 21) + 1;
   document.getElementById('day-num').textContent = dayInRound;
@@ -647,8 +670,10 @@ async function saveEntry() {
   FIELDS.forEach(f => entry[f.id] = document.getElementById(f.id).value);
   showToast('保存中…');
   try {
-    await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
-    entries.unshift(entry);
+    const latest = await getCloudEntries(); // 先取云端最新数据，避免多设备写入互相覆盖
+    latest.unshift(entry);
+    await pushCloudEntries(latest);
+    entries = latest;
     localStorage.removeItem('parenting_draft');
     showToast('✅ 已保存！');
   } catch(e) { showToast('❌ 保存失败，请重试'); }
@@ -780,8 +805,10 @@ function renderHistory() {
 async function deleteEntry(i) {
   if (!confirm('确认删除这条记录？')) return;
   try {
-    await fetch(API + '?index=' + i, { method: 'DELETE' });
-    entries.splice(i, 1);
+    const latest = await getCloudEntries();
+    latest.splice(i, 1);
+    await pushCloudEntries(latest);
+    entries = latest;
     renderHistory();
     showToast('已删除');
   } catch(e) { showToast('❌ 删除失败'); }
