@@ -532,8 +532,11 @@ async function getCloudEntries() {
   if (!res.ok) throw new Error('读取云端数据失败');
   const data = await res.json();
   // jsonbin返回格式是 { record: ..., metadata: ... }，实际数据在 record 里
+  // 存储用 {entries:[...]} 对象包裹（而不是裸数组），避免entries为空时jsonbin判定"内容为空"报错
   const record = data.record;
-  return Array.isArray(record) ? record : [];
+  if (record && Array.isArray(record.entries)) return record.entries;
+  if (Array.isArray(record)) return record; // 兼容旧数据万一是裸数组格式
+  return [];
 }
 
 // 把全部打卡记录整体写回云端
@@ -541,7 +544,7 @@ async function pushCloudEntries(list) {
   const res = await fetch(`${WORKER_URL}/bin/${BIN_ID}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-Access-Token': ACCESS_TOKEN },
-    body: JSON.stringify(list)
+    body: JSON.stringify({ entries: list }) // 对象包裹，哪怕list是空数组也不会被jsonbin拒绝
   });
   if (!res.ok) throw new Error('保存到云端失败');
 }
